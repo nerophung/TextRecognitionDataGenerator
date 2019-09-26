@@ -1,11 +1,13 @@
 import os
 import random as rnd
+import cv2
 
 from PIL import Image, ImageFilter
 
 import computer_text_generator
 import background_generator
 import distorsion_generator
+import numpy as np
 try:
     import handwritten_text_generator
 except ImportError as e:
@@ -20,6 +22,43 @@ class FakeTextDataGenerator(object):
         """
 
         cls.generate(*t)
+    @staticmethod
+    def crop_like_segment(img):
+        img = np.array(img)
+        list_index = np.array(np.where(img == 255))
+        x_min = np.min(list_index[0])
+        x_max = np.max(list_index[0])
+        y_min = np.min(list_index[1])
+        y_max = np.max(list_index[1])
+        if x_max != img.shape[1]:
+            x_max += 1
+        if y_max != img.shape[0]:
+            y_max += 1
+        if x_max == img.shape[1]:
+            border_image = np.array(img[x_min:, y_min: y_max])
+        elif y_max == img.shape[0]:
+            border_image = np.array(img[x_min: x_max, y_min:])
+        else:
+            border_image = np.array(img[x_min:x_max, y_min:y_max])
+        border_image = cv2.cvtColor(border_image, cv2.COLOR_GRAY2BGR)
+        new_height, new_width, _ = border_image.shape
+        top, bottom, left, right = 0, 0, 0, 0
+        delta = abs(new_height - new_width)
+        if new_height > new_width:
+            left = right = delta // 2
+        elif new_width > new_height:
+            bottom = top = delta // 2
+        border_image = cv2.copyMakeBorder(border_image, top, bottom, left, right, cv2.BORDER_CONSTANT, (0, 0, 0))
+        top = 10
+        bottom = 10
+        left = 10
+        right = 10
+        border_image = cv2.copyMakeBorder(border_image, top, bottom, left, right, cv2.BORDER_CONSTANT,
+                                          (0, 0, 0))
+
+        resized_border_image = cv2.resize(border_image, (50, 50))
+        resized_border_image = cv2.cvtColor(resized_border_image, cv2.COLOR_BGR2GRAY)
+        return resized_border_image
 
     @classmethod
     def generate(cls, index, text, font, out_dir, size, extension, skewing_angle, random_skew, blur, random_blur, background_type, distorsion_type, distorsion_orientation, is_handwritten, name_format, width, alignment, text_color, orientation, space_width, margins, fit):
@@ -134,5 +173,13 @@ class FakeTextDataGenerator(object):
             print('{} is not a valid name format. Using default.'.format(name_format))
             image_name = '{}_{}.{}'.format(text, str(index), extension)
 
+        final_image = np.array(final_image.convert('L'), dtype=np.uint8)
+        _, binary_image = cv2.threshold(final_image, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
+        final_image = cls.crop_like_segment(binary_image)
+
         # Save the image
-        final_image.convert('RGB').save(os.path.join(out_dir, image_name))
+        # final_image.convert('RGB').save(os.path.join(out_dir, image_name))
+        image_dir_path = os.path.join(out_dir, text)
+        os.makedirs(image_dir_path, exist_ok=True)
+        cv2.imwrite(os.path.join(image_dir_path, image_name), final_image)

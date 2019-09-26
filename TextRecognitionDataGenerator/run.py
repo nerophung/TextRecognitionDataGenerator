@@ -290,6 +290,8 @@ def load_fonts(lang):
 
     if lang == 'cn':
         return [os.path.join('fonts/cn', font) for font in os.listdir('fonts/cn')]
+    if lang == 'jp':
+        return [os.path.join('fonts/jp', font) for font in os.listdir('fonts/jp')]
     else:
         return [os.path.join('fonts/latin', font) for font in os.listdir('fonts/latin')]
 
@@ -335,30 +337,51 @@ def main():
         if args.include_symbols or True not in (args.include_letters, args.include_numbers, args.include_symbols):
             args.name_format = 2
     else:
-        strings = create_strings_from_dict(args.length, args.random, args.count, lang_dict)
+        strings = create_strings_from_dict(args.count, lang_dict)
 
     if args.case == 'upper':
         strings = [x.upper() for x in strings]
     if args.case == 'lower':
         strings = [x.lower() for x in strings]
 
-    string_count = len(strings)
+    list_words = []
+    list_font = fonts
+    list_blurs = [0, 1, 2, 3]
+    list_bg = [0, 1]
+    list_size = range(50, 120, 10)
+    arr_font = []
+    arr_blur = []
+    arr_bg = []
+    arr_size = []
+
+    for char in strings:
+        for font in list_font:
+            for blur in list_blurs:
+                for back in list_bg:
+                    for size in list_size:
+                        arr_size.append(size)
+                        list_words.append(char)
+                        arr_font.append(font)
+                        arr_blur.append(blur)
+                        arr_bg.append(back)
+
+    string_count = len(list_words)
 
     p = Pool(args.thread_count)
     for _ in tqdm(p.imap_unordered(
             FakeTextDataGenerator.generate_from_tuple,
             zip(
                 [i for i in range(0, string_count)],
-                strings,
-                [fonts[rnd.randrange(0, len(fonts))] for _ in range(0, string_count)],
+                list_words,
+                arr_font,
                 [args.output_dir] * string_count,
-                [args.format] * string_count,
+                arr_size,
                 [args.extension] * string_count,
                 [args.skew_angle] * string_count,
                 [args.random_skew] * string_count,
-                [args.blur] * string_count,
+                arr_blur,
                 [args.random_blur] * string_count,
-                [args.background] * string_count,
+                arr_bg,
                 [args.distorsion] * string_count,
                 [args.distorsion_orientation] * string_count,
                 [args.handwritten] * string_count,
@@ -371,7 +394,7 @@ def main():
                 [args.margins] * string_count,
                 [args.fit] * string_count
             )
-    ), total=args.count):
+    ), total=string_count):
         pass
     p.terminate()
 
@@ -380,7 +403,7 @@ def main():
         with open(os.path.join(args.output_dir, "labels.txt"), 'w', encoding="utf8") as f:
             for i in range(string_count):
                 file_name = str(i) + "." + args.extension
-                f.write("{} {}\n".format(file_name, strings[i]))
+                f.write("{} {}\n".format(file_name, list_words[i]))
 
 
 if __name__ == '__main__':
